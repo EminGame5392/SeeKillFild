@@ -1,0 +1,24 @@
+settings:
+  # BossBar (полоса босса)
+  BossBar: false  # Включить/выключить BossBar
+  BossBarTime: 10  # Длительность отображения в секундах
+  BossBar_message: "&aВы убили &b{dead}"  # Сообщение в BossBar
+
+  # ActionBar (строка над хотбаром)
+  actionbar: false  # Включить/выключить ActionBar
+  actionbarTime: 10  # Длительность отображения в секундах (0 = без таймера)
+  actionbar_message: "&aВы убили &b{dead}"  # Сообщение в ActionBar
+
+  # Title (заголовок в центре экрана)
+  Title: true  # Включить/выключить Title
+  TitleTime: 10  # Время отображения в секундах
+  Title_message: "&c⚔"  # Заголовок
+
+  # SubTitle (подзаголовок)
+  SubTitle: true  # Включить/выключить SubTitle
+  SubTitleTime: 10  # Время отображения в секундах
+  SubTitle_message: "&fВы убили &b{dead}"  # Подзаголовок
+
+  # Message (обычное сообщение в чат)
+  Message: false  # Включить/выключить сообщение в чат
+  Message_message: "&c⚔ &fВы убили &b{dead}"  # Сообщение в чат
