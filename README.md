@@ -1,6 +1,6 @@
 # SeeKillFild 🔥
 
-![Version](https://img.shields.io/badge/Version-1.2.0-blue)
+![Version](https://img.shields.io/badge/Version-1.1.0-blue)
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.16.4--1.20.x-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Java](https://img.shields.io/badge/Java-8%2B-orange)
