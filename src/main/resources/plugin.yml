@@ -1,5 +1,5 @@
 name: SeeKillFild
-version: '1.0'
+version: '1.1.0'
 main: su.seemine.seekillfild.SeeKillFild
 api-version: '1.16'
 authors: [EminGame5392]

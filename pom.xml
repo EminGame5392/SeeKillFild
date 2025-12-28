@@ -6,7 +6,7 @@
 
     <groupId>su.seemine</groupId>
     <artifactId>SeeKillFild</artifactId>
-    <version>1.0.0-LATEST</version>
+    <version>1.1.0</version>
     <packaging>jar</packaging>
 
     <name>SeeKillFild</name>
@@ -57,8 +57,8 @@
             <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
         </repository>
         <repository>
-            <id>sonatype</id>
-            <url>https://oss.sonatype.org/content/groups/public/</url>
+            <id>papermc</id>
+            <url>https://papermc.io/repo/repository/maven-public/</url>
         </repository>
     </repositories>
 

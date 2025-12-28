@@ -13,9 +13,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import net.md_5.bungee.api.ChatMessageType;
-import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.scheduler.BukkitRunnable;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,9 +27,11 @@ public class SeeKillFild extends JavaPlugin implements Listener {
     private String bossBarMessage, actionBarMessage, titleMessage, subtitleMessage, message;
     private int bossBarTime, actionBarTime, titleTime, subtitleTime;
     private boolean bossBarEnabled, actionBarEnabled, titleEnabled, subtitleEnabled, messageEnabled;
+    private boolean isLegacyVersion;
 
     @Override
     public void onEnable() {
+        checkServerVersion();
         saveDefaultConfig();
         loadConfig();
         getServer().getPluginManager().registerEvents(this, this);
@@ -41,6 +44,16 @@ public class SeeKillFild extends JavaPlugin implements Listener {
             bossBar.removeAll();
         }
         activeBossBars.clear();
+    }
+
+    private void checkServerVersion() {
+        try {
+            String version = Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3];
+            int majorVersion = Integer.parseInt(version.split("_")[1]);
+            isLegacyVersion = majorVersion <= 12;
+        } catch (Exception e) {
+            isLegacyVersion = true;
+        }
     }
 
     private void loadConfig() {
@@ -104,28 +117,85 @@ public class SeeKillFild extends JavaPlugin implements Listener {
 
         activeBossBars.put(killer.getUniqueId(), bossBar);
 
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (bossBar != null) {
-                bossBar.removeAll();
-                activeBossBars.remove(killer.getUniqueId());
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (bossBar != null) {
+                    bossBar.removeAll();
+                    activeBossBars.remove(killer.getUniqueId());
+                }
             }
-        }, bossBarTime * 20L);
+        }.runTaskLater(this, bossBarTime * 20L);
     }
 
     private void displayActionBar(Player killer, Player victim) {
         String formattedMessage = ChatColor.translateAlternateColorCodes('&',
                 actionBarMessage.replace("{dead}", victim.getName()));
 
-        killer.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                TextComponent.fromLegacyText(formattedMessage));
+        if (isLegacyVersion) {
+            sendLegacyActionBar(killer, formattedMessage);
+        } else {
+            sendModernActionBar(killer, formattedMessage);
+        }
 
         if (actionBarTime > 0) {
-            Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (killer.isOnline()) {
-                    killer.spigot().sendMessage(ChatMessageType.ACTION_BAR,
-                            TextComponent.fromLegacyText(""));
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (killer.isOnline()) {
+                        if (isLegacyVersion) {
+                            sendLegacyActionBar(killer, "");
+                        } else {
+                            sendModernActionBar(killer, "");
+                        }
+                    }
                 }
-            }, actionBarTime * 20L);
+            }.runTaskLater(this, actionBarTime * 20L);
+        }
+    }
+
+    private void sendModernActionBar(Player player, String message) {
+        try {
+            Class<?> chatMessageTypeClass = Class.forName("net.md_5.bungee.api.ChatMessageType");
+            Class<?> textComponentClass = Class.forName("net.md_5.bungee.api.chat.TextComponent");
+            Object chatMessageType = chatMessageTypeClass.getDeclaredField("ACTION_BAR").get(null);
+            Object textComponent = textComponentClass.getConstructor(String.class).newInstance(message);
+
+            Method sendMessageMethod = player.getClass().getMethod("spigot");
+            Object spigot = sendMessageMethod.invoke(player);
+
+            Method sendMessageMethod2 = spigot.getClass().getMethod("sendMessage", chatMessageTypeClass, textComponentClass);
+            sendMessageMethod2.invoke(spigot, chatMessageType, textComponent);
+        } catch (Exception e) {
+            player.sendMessage(message);
+        }
+    }
+
+    private void sendLegacyActionBar(Player player, String message) {
+        try {
+            Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".entity.CraftPlayer");
+            Object craftPlayer = craftPlayerClass.cast(player);
+
+            Class<?> packetClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PacketPlayOutChat");
+            Class<?> iChatBaseComponentClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent");
+            Class<?> chatSerializerClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent$ChatSerializer");
+
+            Method aMethod = chatSerializerClass.getMethod("a", String.class);
+            Object component = aMethod.invoke(null, "{\"text\":\"" + message.replace("\"", "\\\"") + "\"}");
+
+            Constructor<?> packetConstructor = packetClass.getConstructor(iChatBaseComponentClass, byte.class);
+            Object packet = packetConstructor.newInstance(component, (byte) 2);
+
+            Method getHandleMethod = craftPlayerClass.getMethod("getHandle");
+            Object entityPlayer = getHandleMethod.invoke(craftPlayer);
+
+            Class<?> playerConnectionClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PlayerConnection");
+            Method sendPacketMethod = playerConnectionClass.getMethod("sendPacket", Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".Packet"));
+
+            Object playerConnection = entityPlayer.getClass().getField("playerConnection").get(entityPlayer);
+            sendPacketMethod.invoke(playerConnection, packet);
+        } catch (Exception e) {
+            player.sendMessage(message);
         }
     }
 
@@ -147,7 +217,56 @@ public class SeeKillFild extends JavaPlugin implements Listener {
         int stay = Math.max(titleTime, subtitleTime) * 20;
         int fadeOut = 10;
 
-        killer.sendTitle(titleText, subtitleText, fadeIn, stay, fadeOut);
+        if (isLegacyVersion) {
+            sendLegacyTitle(killer, titleText, subtitleText, fadeIn, stay, fadeOut);
+        } else {
+            killer.sendTitle(titleText, subtitleText, fadeIn, stay, fadeOut);
+        }
+    }
+
+    private void sendLegacyTitle(Player player, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
+        try {
+            Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".entity.CraftPlayer");
+            Object craftPlayer = craftPlayerClass.cast(player);
+
+            Class<?> packetTitleClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PacketPlayOutTitle");
+            Class<?> iChatBaseComponentClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent");
+            Class<?> chatSerializerClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent$ChatSerializer");
+            Class<?> enumTitleActionClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PacketPlayOutTitle$EnumTitleAction");
+
+            Method aMethod = chatSerializerClass.getMethod("a", String.class);
+
+            if (title != null && !title.isEmpty()) {
+                Object titleComponent = aMethod.invoke(null, "{\"text\":\"" + title.replace("\"", "\\\"") + "\"}");
+                Object titleAction = enumTitleActionClass.getField("TITLE").get(null);
+                Constructor<?> titleConstructor = packetTitleClass.getConstructor(enumTitleActionClass, iChatBaseComponentClass, int.class, int.class, int.class);
+                Object titlePacket = titleConstructor.newInstance(titleAction, titleComponent, fadeIn, stay, fadeOut);
+
+                sendPacket(craftPlayer, titlePacket);
+            }
+
+            if (subtitle != null && !subtitle.isEmpty()) {
+                Object subtitleComponent = aMethod.invoke(null, "{\"text\":\"" + subtitle.replace("\"", "\\\"") + "\"}");
+                Object subtitleAction = enumTitleActionClass.getField("SUBTITLE").get(null);
+                Constructor<?> subtitleConstructor = packetTitleClass.getConstructor(enumTitleActionClass, iChatBaseComponentClass, int.class, int.class, int.class);
+                Object subtitlePacket = subtitleConstructor.newInstance(subtitleAction, subtitleComponent, fadeIn, stay, fadeOut);
+
+                sendPacket(craftPlayer, subtitlePacket);
+            }
+        } catch (Exception e) {
+            player.sendMessage(title + (subtitle.isEmpty() ? "" : "\n" + subtitle));
+        }
+    }
+
+    private void sendPacket(Object craftPlayer, Object packet) throws Exception {
+        Method getHandleMethod = craftPlayer.getClass().getMethod("getHandle");
+        Object entityPlayer = getHandleMethod.invoke(craftPlayer);
+
+        Class<?> playerConnectionClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PlayerConnection");
+        Method sendPacketMethod = playerConnectionClass.getMethod("sendPacket", Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".Packet"));
+
+        Object playerConnection = entityPlayer.getClass().getField("playerConnection").get(entityPlayer);
+        sendPacketMethod.invoke(playerConnection, packet);
     }
 
     private void sendMessageToPlayer(Player killer, Player victim) {
